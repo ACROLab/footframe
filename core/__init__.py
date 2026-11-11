@@ -1,1 +1,1 @@
-"""FootFrame automatic 2D vision implementation (rebuilt standalone)."""
+"""FootFrame V1 - lecture-named OpenCV 2D measurement modules."""

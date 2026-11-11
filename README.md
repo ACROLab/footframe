@@ -1,109 +1,109 @@
-# FootFrame — A4 기준 2D 발 치수 측정 (OpenCV 전용)
+# FootFrame — Version 1 (V1)
 
-스마트폰에서 촬영한 **위쪽 사진 1~4장**과 **측면 사진 1~4장**을 자동 분석하여 발볼과 발 길이의 **A4 평면 기준 투영 추정값**을 구하는 연구/수업 프로젝트입니다.
+**강의자료 용어로 파일명을 통일한 순수 2D OpenCV 발 치수 측정 프로젝트**
 
-> 배포판 범위: **v33 순수 2D OpenCV 측정 파이프라인**. v34 이후의 U-Net, DQN, PyTorch 및 학습 데이터는 의도적으로 포함하지 않았습니다. v29 원본 전체를 병합한 것은 아니며, 기존 v33 독립 실행형 재구축 소스를 유지합니다.
+- 기준물: **A4 210 × 297 mm**
+- 입력: 웹에서는 위쪽(top) 사진 2~4장, 측면(side) 사진 2~4장씩 업로드 (API는 종류별 최소 1장을 받지만 최종 치수 통합에는 유효 관측 2장 이상 필요)
+- 출력: A4 평면을 기준으로 환산한 **발볼**(top)과 **발 길이**(side), 사용/제외 사진 및 그 이유
+- 구현: OpenCV + NumPy. **딥러닝, 강화학습, 3D 복원, 수동 꼭짓점 선택 없음**
+- 중요한 한계: Homography는 **A4 평면의 원근만 보정**합니다. 발 높이와 렌즈 왜곡에 의한 오차는 남습니다.
 
-## 핵심 기능
+## V1 의미
 
-- 일반 흰색 A4(210 × 297mm)를 기준으로 자동 네 모서리 탐색(수동 클릭 없음)
-- 흰색 영역/Contour, LSD 선분, 경계 대비 검증 및 가려진 A4 보조 후보
-- RANSAC 기반 선 정밀화 → `getPerspectiveTransform` / `warpPerspective`
-- HSV/Lab 색상 및 Morphology 기반 발 마스크 → 측정값 환산
-- 사진별 관측 검증 → 중앙값/MAD 이상치 검사 → 유효 사진 결과 융합
-- 반응형 모바일 웹에서 업로드 및 사진별 검출 경계 확인
-- 개인 사진이나 업로드 원본을 파일로 저장하지 않고 메모리에서 분석
+**V1은 새 GitHub 저장소를 위한 이름/폴더 구조 버전입니다.**
+측정 로직은 기존에 검증했던 CV-only(v33 알고리즘) 버전과 동일하게 보존하는 것을 목표로 분리/이름 변경하였습니다.
+새 데이터로 새 모델을 개발하거나 정확도를 개선했다고 주장하지 않습니다.
 
-**주의:** Homography는 A4가 놓인 **평면**을 보정합니다. 발은 높이가 있으므로 실제 발 길이·발볼의 정확성이 보장되지 않습니다. 신발 구매용 확정 치수나 의료용 측정기로 사용하지 마세요. 자동 신발 모델 추천 기능은 이 소스에 포함되어 있지 않습니다.
+## 실행 순서와 파일 위치
 
-## GitHub 업로드
+| 순서 | 강의 개념 | 위치 | 실제 역할 |
+|---:|---|---|---|
+| 1 | L02 Image Processing | `core/image_processing.py` | `resize_image()` 입력 이미지 축소 |
+| 2 | L03 Color Segmentation, L02 Morphology | `core/color_segmentation.py` | `_candidate_contours()` A4 밝은 영역 후보, `foot_mask()` 피부색 발 마스크 |
+| 3 | L02 Edge Detection, L06 Linear Algebra | `core/edge_detection.py` | `detect_a4()` LSD 직선 검출 및 교점 사각형 후보 |
+| 4 | L02 Canny / Hough Transform | `core/hough_transform.py` | `occluded_paper_proposals()` 가려진 A4 후보 |
+| 5 | L06 Least Squares / L07 RANSAC | `core/ransac.py` | `refine_quad()` 경계 직선 보정, `order_quad()` 순서 정렬 |
+| 6 | L04 Image Formation / L05 Image Geometry | `core/image_geometry.py` | `_paper_proof()` A4 후보 검증, `detect_paper()` 최종 선택 |
+| 7 | L05 Homography | `core/homography.py` | `rectify()` A4 210×297mm를 2px/mm 좌표계로 변환 |
+| 8 | L02 Segmentation / L05 Coordinate Transformation | `core/measurement_2d.py` | `top_width()`, `side_length()`, `analyze_frame()`, `analyze_batch()` |
+| 9 | L07 Outlier Rejection + MAD | `core/outlier_rejection.py` | `fuse()` 사진별 측정치 이상치 제거 및 통합 |
 
-1. 이 ZIP을 **압축 해제**합니다.
-2. GitHub의 **새 `ACROLab/footframe` 저장소 루트**에 압축 해제한 **파일 및 폴더 내용물 전체**를 업로드/교체합니다. 상위 폴더 `FootFrame_CVOnly_GitHub_Ready` 자체를 또 하나의 하위 폴더로 만들지 마세요.
-3. `core/`와 `tests/` 폴더의 상대 경로를 그대로 유지한 상태로 **Commit changes**를 선택합니다.
-4. 기존 Render 웹주소를 유지하려면 Render 대시보드에서 **기존 서비스 → Settings → Build → Source → Edit**를 선택하여 Git 저장소를 `ACROLab/footframe`, 브랜치를 `main`으로 변경합니다.
-   - Runtime: `Python 3` / Build Command: `pip install -r requirements.txt` / Start Command: `python app.py`
-   - `render.yaml`은 Render **Blueprint** 방식으로 새 서비스를 만들 때만 사용합니다. 일반 Web Service를 대시보드에서 연결하면 이 YAML이 자동으로 적용되는 것은 아닙니다.
-   - `render.yaml`의 새 서비스명 `footframe-acrolab`은 기존 `footframe-2d` 서비스와 구분하기 위한 것입니다. 기존 서비스의 Source만 변경하는 경우에는 기존 Render 서비스명과 URL을 그대로 유지할 수 있습니다.
+A4 후보는 **Contour + LSD 직선 검출**을 병렬로 만들고, `image_geometry.py`가 이를 평가합니다. `ransac.py`로 경계를 보정한 뒤, `homography.py`가 평면으로 펼칩니다. `measurement_2d.py`는 `color_segmentation.py`의 발 마스크를 이용합니다.
 
-**GitHub에 업로드하면 안 되는 자료:** 개인 발 사진, 강의 PDF, 실측 개인정보, 가중치 파일, `.env` 등. 이 ZIP에는 이러한 자료가 들어 있지 않습니다.
+## 전체 폴더
 
-## 빠른 실행 / 배포 설정
-
-Python 3.11 이상 권장. Python 패키지로는 NumPy와 OpenCV headless만 필요합니다.
-
-```bash
-python -m pip install -r requirements.txt
-python app.py
+```text
+FootFrame_V1/
+├── app.py                         # 웹 서버 및 사진 분석 API (/analyze, /health)
+├── web/                           # 실제 서비스 화면 (웹 프런트엔드)
+│   ├── index.html                 # 업로드 및 결과 페이지
+│   ├── styles.css                 # 반응형 화면 디자인
+│   ├── app.js                     # 파일 미리보기, 업로드, 결과 표시
+│   └── favicon.svg                # 브라우저 아이콘
+├── evaluate.py                    # 사진별 측정 및 실측 오차 검증(실측은 알고리즘에 미사용)
+├── visualize_results.py           # 원본/A4 검출/마스크 이미지 생성
+├── benchmark_homography.py        # 합성 A4 네 모서리 위치 오차 테스트
+├── core/
+│   ├── __init__.py
+│   ├── image_processing.py
+│   ├── color_segmentation.py
+│   ├── edge_detection.py
+│   ├── hough_transform.py
+│   ├── ransac.py
+│   ├── image_geometry.py
+│   ├── homography.py
+│   ├── measurement_2d.py
+│   └── outlier_rejection.py
+├── tests/
+│   ├── conftest.py
+│   ├── test_image_processing.py
+│   └── test_image_geometry.py
+├── COURSE_CODE_GUIDE.md           # 상세한 강의 단원 ↔ 함수 ↔ 코드 위치
+├── requirements.txt
+├── requirements-dev.txt
+├── render.yaml                    # ACROLab/footframe, branch main
+├── start_windows.bat
+├── start_ubuntu.sh
+├── VERSION                        # 1.0.0
+└── .gitignore
 ```
 
-- 로컬 주소: `http://127.0.0.1:8000`
-- 기본 웹 화면: `/`
-- 상태 검사: `/health`
-- 사진 분석 API: `POST /analyze` (multipart/form-data; `top`, `side` 항목)
-- 서버는 배포 환경의 `PORT`와 `HOST` 환경변수를 읽습니다.
+## 설치 및 테스트
 
-Render의 일반 **Web Service**로 수동 연결할 경우:
-
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `python app.py`
-- Health Check Path: `/health`
-- Root Directory: 저장소 루트
-
-무료 서비스의 절전·사용량 제한과 업로드 데이터의 처리·개인정보 정책은 서비스별로 확인해야 합니다. 업로드 파일은 서버 디스크에 저장하지 않지만 메모리와 전송 과정에서 처리됩니다.
-
-## 소스 구성
-
-| 경로 | 역할 |
-|---|---|
-| `app.py` | 사진 업로드, 서버 API, 결과 모바일 화면 |
-| `core/geometry.py` | 종이 후보 검증과 원근 보정 |
-| `core/detect_a4_experimental.py` | LSD 선분 기반 A4 검출 |
-| `core/occluded_paper.py` | 부분적으로 가려진 종이의 보조 검출 |
-| `core/refine_a4.py` | RANSAC 기반 A4 경계 정밀화 |
-| `core/measurement.py` | HSV/Lab 발 마스크, 발 길이·발볼 측정 |
-| `core/fuse_2d.py` | 사진별 이상 관측 검사와 융합 |
-| `evaluate.py` | 지정 사진 측정, 선택적 실측 오차 **사후 검증** |
-| `audit_v33.py` | 검출선·보정 영상·마스크 이미지 생성 |
-| `benchmark_v33.py` | 합성 종이 장면의 모서리 정확도 시험 |
-| `tests/` | 기본 CV 및 v33 회귀 테스트 |
-| `render.yaml` | Render 배포 설정 |
-
-## 테스트
+Python **3.11 이상** 권장. Windows / Ubuntu 동일한 핵심 명령입니다.
 
 ```bash
 python -m pip install -r requirements-dev.txt
-python -m pytest tests -q
+python -m pytest -q
 ```
 
-`tests/test_v33.py`의 일부 테스트는 비공개 발 사진이 있을 때만 실행되며, 사진이 없는 공개 GitHub 사본에서는 정상적으로 건너뜁니다.
-
-### 내 사진으로 검증하기
-
-사진은 저장소에 올리지 말고 로컬 별도 폴더에 저장한 뒤 다음 명령을 사용합니다.
+## 실측 사진 분석 (웹 화면 외 별도 CLI)
 
 ```bash
-python evaluate.py --top path/to/top1.jpg path/to/top2.jpg \
-  --side path/to/side1.jpg path/to/side2.jpg --out evaluation.json
+python evaluate.py --top top1.jpg top2.jpg --side side1.jpg side2.jpg --out result.json
 ```
 
-실측이 있으면 `--reference-length`와 `--reference-width` 옵션으로 **분석 후 결과 비교**에만 추가할 수 있습니다. 이 숫자는 `core/`의 측정 알고리즘에 사용되지 않습니다.
+오차 비교만 수행하려면 `--reference-length` 및 `--reference-width`를 추가합니다. 실제 길이는 검출기에서 사용하지 않습니다.
 
-A4 경계·발 마스크 시각화:
+이미지 시각화는 다음 폴더 형식으로 사진을 정리한 후 실행합니다.
+
+```text
+samples/
+├── top/   # *.jpg
+└── side/  # *.jpg
+```
 
 ```bash
-python audit_v33.py --samples path/to/samples --out local_diagnostics
+python visualize_results.py --samples samples --out reports/v1_visuals
+python benchmark_homography.py --out reports/v1_synthetic
 ```
 
-여기서 `path/to/samples`에는 `top/`, `side/` 하위 폴더가 있어야 합니다. 산출된 그림/JSON 역시 공개 저장소에 실수로 추가하지 마세요.
+## 웹/Render
 
-## 검증 범위
+이 문서의 주요 목적은 **컴퓨터비전 학습용 코드 설명**입니다. `app.py`는 API와 정적 파일을 제공하며 웹 화면은 `web/index.html`, `web/styles.css`, `web/app.js`에 분리했습니다. 실제 페이지는 업로드와 결과에만 집중하고, 사진별 검출 로그는 접을 수 있는 상세 결과 안에 배치했습니다.
+기존 Render의 Source를 `ACROLab/footframe`, Branch를 `main`, Build Command를 `pip install -r requirements.txt`, Start Command를 `python app.py`로 설정하면 됩니다. 기존 서비스는 Render Dashboard에서 Source 연결을 변경한 경우 Blueprint와 일치 여부를 따로 확인하세요.
 
-이전 개발에서 제공된 **동일 피험자의 8장**으로 소스에 변경 없이 재현한 기본 측정:
+## 결과 해석
 
-- 발 길이 `247.75 mm` (유효 측면 2장, `provisional`)
-- 발볼 `97.25 mm` (유효 위쪽 4장)
-- 별도의 실측 기준 250 mm / 100 mm와의 차이는 각각 −2.25 mm / −2.75 mm
-- 다른 사람의 발·다른 스마트폰·조명에 대한 일반화 성능은 검증하지 않았습니다.
-
-**실측 250/100mm는 검증 보고용 숫자일 뿐 알고리즘의 보정 상수가 아닙니다.**
+기존 8장의 동일 피험자 사진에서는 **발 길이 247.75mm**, **발볼 97.25mm**가 산출되었습니다.
+실측 **250mm / 100mm**는 테스트 결과의 사후 비교에만 사용한 값이며 보정 상수는 아닙니다. 이 수치는 다른 사람·조명·카메라에 대한 정확도를 보증하지 않습니다.

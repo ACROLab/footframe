@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 import json
 import cv2
-from core.measurement import analyze_batch
+from core.measurement_2d import analyze_batch
 p=ArgumentParser()
 p.add_argument('--top',nargs='+',required=True,help='top view photographs')
 p.add_argument('--side',nargs='+',required=True,help='side view photographs')
@@ -25,7 +25,7 @@ def load(paths):
     return photos
 
 frames,fusion=analyze_batch(load(a.top),load(a.side))
-report={'version':'footframe-v33-cv-only','frames':[f.json() for f in frames],'fusion':fusion,'reference_validation_only':{'length_mm':a.reference_length,'width_mm':a.reference_width}}
+report={'version':'footframe-v1-cv-only','frames':[f.json() for f in frames],'fusion':fusion,'reference_validation_only':{'length_mm':a.reference_length,'width_mm':a.reference_width}}
 for kind,value in [('length',a.reference_length),('width',a.reference_width)]:
     estimate=fusion[kind]['accepted_mm']
     report['reference_validation_only'][f'{kind}_error_mm']=round(estimate-value,3) if estimate is not None and value is not None else None
