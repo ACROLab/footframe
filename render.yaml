@@ -1,8 +1,12 @@
+# For a NEW Render Blueprint. For an existing Render Web Service,
+# change Settings > Build > Source in the Render Dashboard instead.
 services:
   - type: web
-    name: footframe-2d
+    name: footframe-acrolab
     runtime: python
     plan: free
+    repo: https://github.com/ACROLab/footframe
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     healthCheckPath: /health

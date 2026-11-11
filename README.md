@@ -19,9 +19,12 @@
 ## GitHub 업로드
 
 1. 이 ZIP을 **압축 해제**합니다.
-2. GitHub의 **기존 FootFrame 저장소 루트**에 압축 해제한 **파일 및 폴더 내용물 전체**를 업로드/교체합니다. 상위 폴더 `FootFrame_CVOnly_GitHub_Ready` 자체를 또 하나의 하위 폴더로 만들지 마세요.
+2. GitHub의 **새 `ACROLab/footframe` 저장소 루트**에 압축 해제한 **파일 및 폴더 내용물 전체**를 업로드/교체합니다. 상위 폴더 `FootFrame_CVOnly_GitHub_Ready` 자체를 또 하나의 하위 폴더로 만들지 마세요.
 3. `core/`와 `tests/` 폴더의 상대 경로를 그대로 유지한 상태로 **Commit changes**를 선택합니다.
-4. 기존 연결된 클라우드 서비스가 있으면 해당 저장소의 최신 커밋을 배포합니다. `render.yaml`은 Render Blueprint용 설정입니다.
+4. 기존 Render 웹주소를 유지하려면 Render 대시보드에서 **기존 서비스 → Settings → Build → Source → Edit**를 선택하여 Git 저장소를 `ACROLab/footframe`, 브랜치를 `main`으로 변경합니다.
+   - Runtime: `Python 3` / Build Command: `pip install -r requirements.txt` / Start Command: `python app.py`
+   - `render.yaml`은 Render **Blueprint** 방식으로 새 서비스를 만들 때만 사용합니다. 일반 Web Service를 대시보드에서 연결하면 이 YAML이 자동으로 적용되는 것은 아닙니다.
+   - `render.yaml`의 새 서비스명 `footframe-acrolab`은 기존 `footframe-2d` 서비스와 구분하기 위한 것입니다. 기존 서비스의 Source만 변경하는 경우에는 기존 Render 서비스명과 URL을 그대로 유지할 수 있습니다.
 
 **GitHub에 업로드하면 안 되는 자료:** 개인 발 사진, 강의 PDF, 실측 개인정보, 가중치 파일, `.env` 등. 이 ZIP에는 이러한 자료가 들어 있지 않습니다.
 
