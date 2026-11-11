@@ -150,6 +150,99 @@ function populateDiagnostics(frames) {
     grid.append(card);
   }
 }
+// Server stage updates are authoritative. There is no fake countdown or time-based percentage.
+const analysisOverlay = document.getElementById('analysis-overlay');
+const analysisPanel = analysisOverlay.querySelector('.analysis-panel');
+const analysisDescription = document.getElementById('analysis-description');
+const analysisPhotoLabel = document.getElementById('analysis-photo-label');
+const analysisCount = document.getElementById('analysis-count');
+const analysisProgress = document.getElementById('analysis-progress');
+const analysisProgressFill = document.getElementById('analysis-progress-fill');
+const stepNodes = Array.from(document.querySelectorAll('#analysis-steps li'));
+const stepOrder = ['preprocess','paper','homography','segmentation','fusion'];
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const stageDescriptions = {
+  queued: '사진을 분석할 준비를 하고 있습니다.',
+  decode: '사진 파일을 확인하고 영상 데이터로 변환하고 있습니다.',
+  preprocess: '이미지 크기와 밝기 정보를 정리하고 있습니다.',
+  paper: '흰색 영역과 직선을 검사해 A4 용지의 모서리를 찾고 있습니다.',
+  homography: 'A4의 네 모서리를 기준으로 원근을 보정하고 있습니다.',
+  segmentation: 'HSV와 Lab 색상 정보로 발의 윤곽을 분리하고 있습니다.',
+  measurement: '발 윤곽에서 발 길이 또는 발볼을 계산하고 있습니다.',
+  photo_done: '현재 사진의 분석이 완료되어 다음 사진을 준비하고 있습니다.',
+  fusion: '사진별 측정값의 차이를 확인하고 이상치를 걸러내고 있습니다.',
+  overlays: '분석 결과와 A4 검출 이미지를 정리하고 있습니다.',
+  finished: '사진 분석이 끝났습니다. 결과를 불러오고 있습니다.',
+};
+function showAnalysisOverlay() {
+  analysisOverlay.hidden = false;
+  document.body.classList.add('is-analyzing');
+  updateAnalysisProgress({stage:'queued',completed:0,total:selections.top.length+selections.side.length,kind:null});
+  analysisPanel.focus({preventScroll:true});
+}
+function hideAnalysisOverlay() {
+  analysisOverlay.hidden = true;
+  document.body.classList.remove('is-analyzing');
+}
+function updateAnalysisProgress(data) {
+  const total = Math.max(0, Number(data.total) || 0);
+  const completed = Math.min(total, Math.max(0, Number(data.completed) || 0));
+  const stage = String(data.stage || 'queued');
+  const isFinal = ['fusion','overlays','finished'].includes(stage);
+  const currentPhoto = isFinal ? total : Math.min(total,completed+1);
+  const label = data.kind === 'top' ? '위쪽 사진' : data.kind === 'side' ? '측면 사진' : '전체 사진';
+  analysisPhotoLabel.textContent = isFinal ? '사진별 분석 완료 · 결과 통합 중' :
+    stage === 'queued' || stage === 'decode' ? '사진 불러오는 중' : `${label} · ${currentPhoto}번째 사진`;
+  analysisCount.textContent = `${completed} / ${total}장 완료`;
+  analysisProgress.setAttribute('aria-valuenow', String(total ? Math.round(100*completed/total) : 0));
+  analysisProgressFill.style.width = `${total ? 100*completed/total : 0}%`;
+  analysisDescription.textContent = stageDescriptions[stage] || '사진을 분석하고 있습니다.';
+  const mapped = ['queued','decode','preprocess'].includes(stage) ? 'preprocess' :
+    ['segmentation','measurement','photo_done'].includes(stage) ? 'segmentation' :
+    ['fusion','overlays','finished'].includes(stage) ? 'fusion' : stage;
+  const currentIndex = stepOrder.indexOf(mapped);
+  for (const item of stepNodes) {
+    const index = stepOrder.indexOf(item.dataset.step);
+    item.classList.toggle('is-active',index===currentIndex);
+    item.classList.toggle('is-done',index>=0 && index<currentIndex);
+  }
+}
+async function readResponseJson(response) {
+  try { return await response.json(); }
+  catch { throw new Error('서버의 응답을 읽지 못했습니다. 다시 시도해 주세요.'); }
+}
+async function requestAnalysis(files) {
+  const response = await fetch('/api/jobs', {method:'POST', body:files});
+  const data = await readResponseJson(response);
+  if (!response.ok) throw new Error(data.error || '분석 요청을 시작하지 못했습니다.');
+  if (!/^[0-9a-f]{32}$/.test(data.job_id || '')) throw new Error('분석 작업 번호를 받지 못했습니다.');
+  const id = data.job_id;
+  let pollingErrors = 0;
+  while (true) {
+    let status;
+    try {
+      const stepResponse = await fetch(`/api/jobs/${id}`, {cache:'no-store'});
+      status = await readResponseJson(stepResponse);
+      if (!stepResponse.ok) throw new Error(status.error || '분석 상태를 확인할 수 없습니다.');
+      pollingErrors = 0;
+    } catch (err) {
+      if (++pollingErrors >= 5) throw err;
+      analysisDescription.textContent = '연결 상태를 확인하고 있습니다. 분석 결과를 다시 요청합니다.';
+      await wait(1200);
+      continue;
+    }
+    updateAnalysisProgress(status);
+    if (status.status === 'failed') throw new Error(status.error || '분석 중 오류가 발생했습니다.');
+    if (status.status === 'finished') {
+      const resultResponse = await fetch(`/api/jobs/${id}/result`, {cache:'no-store'});
+      const result = await readResponseJson(resultResponse);
+      if (!resultResponse.ok) throw new Error(result.error || '결과를 불러오지 못했습니다.');
+      return result;
+    }
+    await wait(650);
+  }
+}
+
 function setBusy(busy) {
   isSubmitting = busy;
   button.disabled = busy || kinds.some(k => selections[k].length < MIN_FILES);
@@ -171,22 +264,22 @@ form.addEventListener('submit', async e => {
   }
   showError('');
   setBusy(true);
+  showAnalysisOverlay();
   try {
     const fd = new FormData();
     for (const kind of kinds) for (const file of selections[kind]) fd.append(kind, file, file.name);
-    const response = await fetch('/analyze', {method:'POST', body:fd});
-    let result;
-    try { result = await response.json(); }
-    catch { throw new Error('서버 응답을 읽지 못했습니다. 다시 시도해 주세요.'); }
-    if (!response.ok) throw new Error(result.error || '분석 중 문제가 발생했습니다.');
+    const result = await requestAnalysis(fd);
     showMetric('length',result.fusion?.length);
     showMetric('width',result.fusion?.width);
     populateDiagnostics(result.frames || []);
     document.getElementById('diagnostics').open = false;
     resultSection.hidden = false;
+    hideAnalysisOverlay();
     resultSection.scrollIntoView({behavior:'smooth',block:'start'});
   } catch (err) {
+    hideAnalysisOverlay();
     showError(err instanceof Error ? err.message : '사진을 분석할 수 없습니다. 다시 시도해 주세요.');
+    errorBox.scrollIntoView({behavior:'smooth',block:'nearest'});
   } finally { setBusy(false); }
 });
 

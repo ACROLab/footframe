@@ -17,7 +17,9 @@ def test_screen_is_mobile_and_declares_scope():
     assert 'viewport' in page
     assert '2D 투영 추정치' in page
     assert 'top-input' in page and 'side-input' in page
-    assert "fetch('/analyze'" in script
+    assert "fetch('/api/jobs'" in script
+    assert "/api/jobs/${id}" in script
+    assert "/web/foot_measurement.webp" in STATIC_FILES
     assert '/web/styles.css' in STATIC_FILES
 
 

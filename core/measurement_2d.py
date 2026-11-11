@@ -77,13 +77,22 @@ def side_length(mask,px_per_mm=2.):
     return length,'floor_plane_projected_extent_not_physical_length'
 
 
-def analyze_frame(bgr,kind,view_id):
+def analyze_frame(bgr,kind,view_id,progress=None):
+    """Analyze one photo; progress(stage) is an optional UI callback."""
+    def report(stage):
+        if progress is not None:
+            progress(stage)
     if kind not in ('top','side'):raise ValueError('kind must be top or side')
+    report('preprocess')
     im=resize_image(bgr)
     try:
+        report('paper')
         quad,info=detect_paper(im)
+        report('homography')
         rect,hom,dim=rectify(im,quad)
+        report('segmentation')
         mask=foot_mask(rect)
+        report('measurement')
         if kind=='top':
             if dim[1]<=dim[0]:
                 mm,reason=None,'paper_orientation_not_suitable_for_top'
@@ -113,11 +122,19 @@ def analyze_frame(bgr,kind,view_id):
         return FrameAnalysis(view_id,kind,False,None,str(exc),None,False,None,0,im)
 
 
-def analyze_batch(tops,sides):
+def analyze_batch(tops,sides,progress=None):
     """All photos contribute to ONE physically scoped measurement per kind."""
     items=[]
-    for i,im in enumerate(tops):items.append(analyze_frame(im,'top',f'top-{i+1}'))
-    for i,im in enumerate(sides):items.append(analyze_frame(im,'side',f'side-{i+1}'))
+    all_photos=[('top',im,f'top-{i+1}') for i,im in enumerate(tops)]
+    all_photos += [('side',im,f'side-{i+1}') for i,im in enumerate(sides)]
+    total=len(all_photos)
+    for i,(kind,im,view_id) in enumerate(all_photos):
+        callback=(lambda stage,i=i,kind=kind: progress(stage,i,total,kind)) if progress else None
+        items.append(analyze_frame(im,kind,view_id,progress=callback))
+        if progress is not None:
+            progress('photo_done',i+1,total,kind)
+    if progress is not None:
+        progress('fusion',total,total,None)
     res={}
     for kind,key in [('top','width'),('side','length')]:
         obs=[Observation(o.view_id,key,o.mm if o.mm is not None else 0.,o.corner_score is not None,o.mask_pixels>0,o.accepted,0.,o.reason if not o.accepted else None) for o in items if o.kind==kind]

@@ -68,6 +68,31 @@ FootFrame_V1/
 └── .gitignore
 ```
 
+
+## 분석 로딩창 — 실제 진행 상태 표시
+
+사진 업로드 후 **각 사진의 컴퓨터비전 분석 진행 단계**를 로딩창에서 볼 수 있습니다.
+
+| 단계 | 실제 코드 | 사용자에게 표시하는 내용 |
+|---|---|---|
+| 1. 이미지 전처리 | `core/image_processing.py` | 이미지 크기·밝기 준비 |
+| 2. A4 검출 | `core/image_geometry.py`, `core/edge_detection.py`, `core/ransac.py` | A4 네 모서리 후보 찾기 및 검증 |
+| 3. 원근 보정 | `core/homography.py` | Homography 기반 평면 보정 |
+| 4. 발 윤곽·치수 | `core/color_segmentation.py`, `core/measurement_2d.py` | 피부색 마스크·길이·발볼 계산 |
+| 5. 결과 통합 | `core/outlier_rejection.py` | 이상치 검토·측정 결과 정리 |
+
+`core/measurement_2d.py`가 각 단계가 시작될 때 콜백을 호출하고, `app.py`가 실제 상태를 메모리에 기록합니다.
+웹페이지(`web/app.js`)는 현재 상태를 조회해 표시합니다. 진행 막대는 **완료된 사진 수 / 전체 사진 수**를 나타내며, 실제 알고리즘 처리 시간을 예측한 백분율이 아닙니다.
+
+- `POST /api/jobs`: 분석 시작, `job_id` 반환
+- `GET /api/jobs/<job_id>`: 현재 단계·완료한 사진 수 확인
+- `GET /api/jobs/<job_id>/result`: 완료된 측정 결과 수신
+- `POST /analyze`: 이전 방식의 동기식 분석 API도 유지
+
+분석 중인 사진·결과는 서버 프로세스의 **일시적인 메모리**에만 저장됩니다. 디스크에는 저장하지 않지만 서버가 재시작하면 진행 중인 작업을 잃을 수 있으며, 결과는 열람 후 메모리에서 제거됩니다. 배포 환경이 여러 프로세스로 분산된 경우 메모리 기반 작업 조회가 정상 작동하지 않을 수 있습니다. Render의 단일 프로세스 배포를 전제로 합니다.
+
+홈 화면의 실물형 발 이미지는 `web/foot_measurement.webp`이며, 디자인은 `web/styles.css`에서 변경합니다.
+
 ## 설치 및 테스트
 
 Python **3.11 이상** 권장. Windows / Ubuntu 동일한 핵심 명령입니다.
